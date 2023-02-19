@@ -1,0 +1,82 @@
+import csv, os
+import pandas as pd
+
+def read_csv_file(filename):
+    """
+    Reads a UTF-8 encoded CSV file and returns its contents as a list of dictionaries.
+
+    Parameters:
+        filename (str): The name of the CSV file to read.
+
+    Returns:
+        A list of dictionaries representing the contents of the CSV file.
+    """
+    data = []
+    with open(filename, 'r', encoding='utf-8') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            data.append(row)
+    return data
+
+def read_excel_file(filename):
+    """
+    Reads an Excel file and returns a dictionary.
+
+    Args:
+        filename (str): The name of the Excel file to read.
+
+    Returns:
+        A dictionary representing the data in the Excel file.
+    """
+    # Load the Excel file into a pandas DataFrame
+    df = pd.read_excel(filename)
+    
+    # Convert the DataFrame to a dictionary
+    #data = df.to_dict()
+     # Convert the DataFrame to a list of dictionaries
+    data = df.to_dict(orient='records')   
+    
+    # Return the dictionary
+    return data
+
+def write_csv_file(filename, data):
+    """
+    Writes a list of dictionaries to a UTF-8 encoded CSV file.
+
+    Parameters:
+        filename (str): The name of the CSV file to write to.
+        data (list of dicts): The data to write to the CSV file.
+    """
+    with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
+        fieldnames = data[0].keys() if len(data) > 0 else []
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in data:
+            writer.writerow(row)
+
+def get_image_list(directory, url_base):
+    img_list = []
+    for filename in os.listdir(directory):
+        img_list.append(url_base + '/' + directory + '/' + filename)
+    return img_list
+
+def process_images(data):
+    for i in range(len(data)):
+        row = data[i]
+        for label in row:
+            if label == 'Images':
+                dir = row[label]
+                print(dir)
+                img_list = get_image_list(dir, 'https://silkresource.com/uploads')
+                data[i][label] = ','.join(img_list)
+                print(img_list)
+            
+    return data
+    
+
+data = read_csv_file('test.csv')
+data3 = read_excel_file('test.xlsx')
+
+data2 = process_images(data3)
+
+write_csv_file('test2.csv', data2)
