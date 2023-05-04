@@ -1,5 +1,10 @@
-import csv, os
+import csv, os, urllib.parse
 import pandas as pd
+
+col_sku         = 'SKU'
+col_piece       = 'Piece'
+col_desc        = 'Description'
+col_reg_price   = 'Regular price'
 
 def read_csv_file(filename):
     """
@@ -12,7 +17,7 @@ def read_csv_file(filename):
         A list of dictionaries representing the contents of the CSV file.
     """
     data = []
-    with open(filename, 'r', encoding='utf-8') as csvfile:
+    with open(filename, 'r', encoding='utf-8-sig') as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
             data.append(row)
@@ -54,10 +59,42 @@ def write_csv_file(filename, data):
         for row in data:
             writer.writerow(row)
 
+def write_csv_file2(filename, data, num_rows=1000):
+    """
+    Writes a list of dictionaries to a UTF-8 encoded CSV file, splitting into multiple files if necessary.
+
+    Parameters:
+        filename (str): The base name of the CSV files to write to.
+        data (list of dicts): The data to write to the CSV file.
+        num_rows (int): The maximum number of rows per file. Default is 1000.
+    """
+    # Calculate number of files needed
+    num_files = 1 + (len(data) - 1) // num_rows
+
+    # Create directory to store CSV files
+    if not os.path.exists(filename):
+        os.makedirs(filename)
+
+    # Write data to CSV files
+    for i in range(num_files):
+        start = i * num_rows
+        end = min(start + num_rows, len(data))
+        filename_i = os.path.join(filename, f"{i}.csv")
+        with open(filename_i, 'w', newline='', encoding='utf-8') as csvfile:
+            fieldnames = data[start].keys() if len(data[start:end]) > 0 else []
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in data[start:end]:
+                writer.writerow(row)
+
+
 def get_image_list(directory, url_base):
     img_list = []
     for filename in os.listdir(directory):
-        img_list.append(url_base + '/' + directory + '/' + filename)
+        url = directory + '/' + filename
+        encoded_url = urllib.parse.quote(url)
+        url = url_base + '/' +  encoded_url
+        img_list.append(url)
     return img_list
 
 def process_images(data):
@@ -65,18 +102,153 @@ def process_images(data):
         row = data[i]
         for label in row:
             if label == 'Images':
-                dir = row[label]
-                print(dir)
-                img_list = get_image_list(dir, 'https://silkresource.com/uploads')
-                data[i][label] = ','.join(img_list)
-                print(img_list)
+                dir = row[label].lstrip().rstrip()
+                #print(dir)
+                if os.path.isdir(dir):
+                    img_list = get_image_list(dir, 'https://blackdot.io/photos')
+                    data[i][label] = ','.join(img_list)
+                    print(img_list)
+                else:
+                    print(f"{dir} does not exist.")
             
     return data
+
+
+
+def add_div_tag_product_description(str_input):
+    return '<div class="product-description">' + str_input + '</div>'
+
+# remove a word from a string regardless of case and any surrounding spaces
+def remove_substring(string, substring):
+    return string.lower().replace(substring.lower(), '').strip()
+
+# take a dictionary and output a html table
+def string_to_dict(inventory_string):
+    inventory_dict = {}
+    for line in inventory_string.splitlines():
+        if '#' in line:
+            stock, dye_lot = line.split('#')
+            inventory_dict['Stock'] = inventory_dict.get('Stock', []) + [stock.strip()]
+            inventory_dict['Dye Lot'] = inventory_dict.get('Dye Lot', []) + [('#' + dye_lot.strip())]
+        else:
+            inventory_dict['Stock'] = inventory_dict.get('Stock', []) + [line.strip()]
+            inventory_dict['Dye Lot'] = inventory_dict.get('Dye Lot', []) + ['']
+    return inventory_dict
+
+def dict_to_html_table(data_dict, table_class=''):
+    html = f'<table class="{table_class}">\n<tr>'
+    for key in data_dict.keys():
+        html += '<th>' + str(key) + '</th>'
+    html += '</tr>\n'
+    for i in range(len(data_dict['Stock'])):
+        html += '<tr>'
+        for key in data_dict.keys():
+            html += '<td>' + str(data_dict[key][i]) + '</td>'
+        html += '</tr>\n'
+    html += '</table>'
+    return html
+
+def split_at_msrp(string):
+    split_string = string.split("MSRP:")
+    if len(split_string) > 1:
+        return split_string[0].strip(), "MSRP:" + split_string[1].strip()
+    else:
+        return string.strip(), None
+
+
+def string_to_product_table(string, table_class='product-table-details'):
+    rows = string.split('\n')
+    html = f'<table class="{table_class}">\n'
+    for row in rows:
+        if row.strip() != '':
+            if ':' in row:
+                label, value = row.split(':', 1)
+                html += '<tr>\n'
+                html += f'<td class="label">{label.strip().capitalize()}</td>\n'
+                html += f'<td class="value">{value.strip().capitalize()}</td>\n'
+                html += '</tr>\n'
+            else:
+                html += '<tr>\n'
+                html += f'<td class="item">{row.strip().capitalize()}</td>\n'
+                html += '<td></td>\n'
+                html += '</tr>\n'
+    html += '</table>'
+    return html
+
+
+
+
+# 
+# split description at MSRP
+# convert data after MSRP into structured table
+# add a div to description
+def process_description(data):
+    for i in range(len(data)):
+        desc = data[i][col_desc].lstrip().rstrip()
+        
+        part1, part2 = split_at_msrp(desc)
+        
+        if part2:
+            table = string_to_product_table(part2)
+        else:
+            table = ''
+            print(f"Warning: SKU: '{data[i][col_sku]}' is missing MSRP")
+        
+        desc = add_div_tag_product_description(part1)+add_div_tag_product_description(table)
+        
+        data[i][col_desc] = desc
     
+    return data
 
-data = read_csv_file('test.csv')
-data3 = read_excel_file('test.xlsx')
+# remove leading and trailing space from SKU numbers
+def process_sku(data):
+    for i in range(len(data)):
+        row = data[i]
+        for label in row:
+            if label == 'SKU':
+                sku = row[label].lstrip().rstrip()
+                data[i][label] = sku
+                #print(sku)
+            
+    return data
 
-data2 = process_images(data3)
+# add price info to description
+def process_pieces(data):
+    if col_piece not in data[0]:
+        print(f"Warning: data has no column '{col_piece}'")
+    elif col_desc not in data[0]:
+        print(f"Warning: data has no column '{col_desc}'")
+    else:
+        for i in range(len(data)):
+            pieces = data[i]['Piece']
+            if isinstance(pieces, str):
+                pieces = pieces.lstrip().rstrip()
+                pieces =  remove_substring(pieces, 'stock')
+                pieces =  remove_substring(pieces, 'dye lot')
+                pieces_dict = string_to_dict(pieces)
+                #print(pieces_dict)
+                pieces = dict_to_html_table(pieces_dict, table_class='product-table-pieces')
+                #print(pieces)
+                pieces = add_div_tag_product_description(pieces)
+                data[i][col_desc] += pieces
+    
+    return data
 
-write_csv_file('test2.csv', data2)
+def round_regular_price(data):
+    rounded_rows = []
+    for row in data:
+        row['Regular price'] = round(float(row[col_reg_price]), 0)
+        rounded_rows.append(row)
+    return rounded_rows
+
+
+#data = read_csv_file('import.csv')
+data = read_excel_file('import-2023-03-09-grey.xlsx')
+
+data = process_sku(data)
+data = process_description(data)
+data = process_pieces(data)
+data = round_regular_price(data)
+data2 = process_images(data)
+
+write_csv_file2('out-test2', data2, 40)
