@@ -12,9 +12,12 @@ def process_orders():
     # Load the CSV inventory file
     inventory_df = pd.read_csv(f'{data_dir}/{inventory_file}')
 
-    # Remove single quotes in 'Stock' column, replace NaN with 0, and convert to integer
-    inventory_df['Stock'] = inventory_df['Stock'].str.replace("'", "").fillna(0).astype(int)
+    # Check datatype of 'Stock'
+    print(inventory_df['Stock'].dtypes)
 
+    # Convert 'Stock' to float, replace NaN with 0, and convert to integer
+    inventory_df['Stock'] = inventory_df['Stock'].astype(float).fillna(0.0).astype(int)
+    
     # Load the Excel orders file
     orders_df = pd.read_excel(f'{data_dir}/{orders_file}')
 
